@@ -166,20 +166,26 @@ Puppet::Type.type(:mongodb_shard).provide(:mongo, parent: Puppet::Provider::Mong
     if command == 'sh.status()'
       myarr = output.split("\n")
       myarr.shift
+      if myarr[0][0] == '-'
+        myarr.shift
+      end
       myarr.pop
       myarr.pop
       final_stream = []
       prev_line = nil
       in_shard_list = 0
+      in_ignore = 0
       in_chunk = 0
       myarr.each do |line|
+        in_ignore = 0 if line =~ /^  \S/
+        in_ignore = 1 if line =~ /active mongoses:|autosplit:|balancer:/
         line.gsub!(%r{sharding version:}, '{ "sharding version":')
+        line.gsub!(%r{"clusterId" : ObjectId\("(.*)"\)}, '"clusterId" : "ObjectId(\'\1\')"')
         line.gsub!(%r{shards:}, ',"shards":[')
         line.gsub!(%r{databases:}, '], "databases":[')
-        line.gsub!(%r{"clusterId" : ObjectId\("(.*)"\)}, '"clusterId" : "ObjectId(\'\1\')"')
         line.gsub!(%r{\{  "_id" :}, ',{  "_id" :') if %r{_id} =~ prev_line
         # Modification for shard
-        line = '' if line =~ %r{on :.*Timestamp}
+        line = '' if line =~ %r{on :.*Timestamp} || in_ignore == 1
         if line =~ %r{_id} && in_shard_list == 1
           in_shard_list = 0
           last_line = final_stream.pop.strip
@@ -212,6 +218,7 @@ Puppet::Type.type(:mongodb_shard).provide(:mongo, parent: Puppet::Provider::Mong
       final_stream << ' ] }' if in_shard_list == 1
       final_stream << ' ] }'
       output = final_stream.join("\n")
+      info(output)
     end
 
     # Hack to avoid non-json empty sets
