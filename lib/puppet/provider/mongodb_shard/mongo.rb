@@ -13,6 +13,11 @@ Puppet::Type.type(:mongodb_shard).provide(:mongo, parent: Puppet::Provider::Mong
 
   commands mongo: 'mongo'
 
+  def self.mongod_conf_file
+    file = '/etc/mongodb-shard.conf'
+    file
+  end
+
   def initialize(value = {})
     super(value)
     @property_flush = {}
@@ -144,11 +149,7 @@ Puppet::Type.type(:mongodb_shard).provide(:mongo, parent: Puppet::Provider::Mong
     # Wait for 2 seconds initially and double the delay at each retry
     wait = 2
     begin
-      args = []
-      args << '--quiet'
-      args << ['--host', host] if host
-      args << ['--eval', "printjson(#{command})"]
-      output = mongo(args.flatten)
+      output = mongo_eval("printjson(#{command})", 'admin', retries, host)
     rescue Puppet::ExecutionFailure => e
       raise unless e =~ %r{Error: couldn't connect to server} && wait <= (2**max_wait)
 
