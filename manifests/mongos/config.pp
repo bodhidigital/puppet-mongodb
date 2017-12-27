@@ -6,6 +6,11 @@ class mongodb::mongos::config (
   $config_template = $mongodb::mongos::config_template,
   $configdb        = $mongodb::mongos::configdb,
   $config_data     = $mongodb::mongos::config_data,
+  $ssl             = $mongodb::mongos::ssl,
+  $ssl_key         = $mongodb::mongos::ssl_key,
+  $ssl_ca          = $mongodb::mongos::ssl_ca,
+  $ssl_weak_cert   = $mongodb::mongos::ssl_weak_cert,
+  $ssl_invalid_hostnames = $mongodb::mongos::ssl_invalid_hostnames
 ) {
 
   if ($ensure == 'present' or $ensure == true) {

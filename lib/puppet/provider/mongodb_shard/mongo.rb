@@ -103,7 +103,7 @@ Puppet::Type.type(:mongodb_shard).provide(:mongo, parent: Puppet::Provider::Mong
 
   def self.shard_properties(shard)
     properties = {}
-    output = mongo_command('sh.status()')
+    output = mongo_command('sh.status()', '127.0.0.1:27017')
     output['shards'].each do |s|
       next unless s['_id'] == shard
       properties = {
@@ -118,7 +118,7 @@ Puppet::Type.type(:mongodb_shard).provide(:mongo, parent: Puppet::Provider::Mong
   end
 
   def self.shards_properties
-    output = mongo_command('sh.status()')
+    output = mongo_command('sh.status()', '127.0.0.1:27017')
     properties = if !output['shards'].empty?
                    output['shards'].map do |shard|
                      {
@@ -144,7 +144,7 @@ Puppet::Type.type(:mongodb_shard).provide(:mongo, parent: Puppet::Provider::Mong
     self.class.mongo_command(command, host, retries)
   end
 
-  def self.mongo_command(command, host = nil, _retries = 4)
+  def self.mongo_command(command, host = nil, retries = 4)
     # Allow waiting for mongod to become ready
     # Wait for 2 seconds initially and double the delay at each retry
     wait = 2
