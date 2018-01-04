@@ -75,9 +75,9 @@ class Puppet::Provider::Mongodb < Puppet::Provider
     ssl_mode.nil? ? false : ssl_mode != 'disabled'
   end
 
-  def self.ssl_invalid_hostnames(config = nil)
+  def self.ssl_invalid_hostnames(host, config = nil)
     config ||= mongo_conf
-    config['allowInvalidHostnames']
+    config['allowInvalidHostnames'] || host =~ %r{^127\.0\.0\.1}
   end
 
   def self.mongo_cmd(db, host, cmd)
@@ -85,7 +85,8 @@ class Puppet::Provider::Mongodb < Puppet::Provider
 
     args = [db, '--quiet', '--host', host]
     args.push('--ipv6') if ipv6_is_enabled(config)
-    args.push('--sslAllowInvalidHostnames') if ssl_invalid_hostnames(config)
+    args.push('--sslAllowInvalidHostnames') if ssl_invalid_hostnames(
+        host, config)
 
     if ssl_is_enabled(config)
       args.push('--ssl')
@@ -96,7 +97,12 @@ class Puppet::Provider::Mongodb < Puppet::Provider
     end
 
     args += ['--eval', cmd]
-    mongo(args)
+    output = mongo(args)
+
+    output.slice!(%r{^\d{4}-\d{2}-\d{2}.* W .* does not match CN:.*\n}) \
+        if ssl_invalid_hostnames(host, config)
+
+    output
   end
 
   def self.conn_string
