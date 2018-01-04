@@ -149,7 +149,7 @@ Puppet::Type.type(:mongodb_shard).provide(:mongo, parent: Puppet::Provider::Mong
     # Wait for 2 seconds initially and double the delay at each retry
     wait = 2
     begin
-      output = mongo_eval("printjson(#{command})", 'admin', retries, host)
+      output = mongo_eval(command, 'admin', retries, host)
     rescue Puppet::ExecutionFailure => e
       raise unless e =~ %r{Error: couldn't connect to server} && wait <= (2**max_wait)
 
