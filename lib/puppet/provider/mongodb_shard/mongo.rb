@@ -159,71 +159,84 @@ Puppet::Type.type(:mongodb_shard).provide(:mongo, parent: Puppet::Provider::Mong
       retry
     end
 
+    output_hash = nil
+
     # NOTE (spredzy) : sh.status()
     # does not return a json stream
     # we jsonify it so it is easier
     # to parse and deal with it
     if command == 'sh.status()'
-      myarr = output.split("\n")
-      myarr.shift
-      if myarr[0][0] == '-'
-        myarr.shift
-      end
-      myarr.pop
-      myarr.pop
-      final_stream = []
+      sh_status_lines = output.split("\n")
+
+      # Remove leading junk "--- Sharding Status ---"
+      sh_status_lines.shift
+
+      # Our output hash.
+      output_hash = {
+        "sharding version" => {},
+        "shards" => [],
+        "databases" => [],
+      }
+
+      # The current and previous lines.
+      line = nil
       prev_line = nil
-      in_shard_list = 0
-      in_ignore = 0
-      in_chunk = 0
-      myarr.each do |line|
-        in_ignore = 0 if line =~ /^  \S/
-        in_ignore = 1 if line =~ /active mongoses:|autosplit:|balancer:/
-        line.gsub!(%r{sharding version:}, '{ "sharding version":')
-        line.gsub!(%r{"clusterId" : ObjectId\("(.*)"\)}, '"clusterId" : "ObjectId(\'\1\')"')
-        line.gsub!(%r{shards:}, ',"shards":[')
-        line.gsub!(%r{databases:}, '], "databases":[')
-        line.gsub!(%r{\{  "_id" :}, ',{  "_id" :') if %r{_id} =~ prev_line
-        # Modification for shard
-        line = '' if line =~ %r{on :.*Timestamp} || in_ignore == 1
-        if line =~ %r{_id} && in_shard_list == 1
-          in_shard_list = 0
-          last_line = final_stream.pop.strip
-          proper_line = "#{last_line}]},"
-          final_stream << proper_line
+
+      # The section currently being parsed.
+      section = nil
+      # Sections we don't want to ignore.
+      valid_sections = [ 'sharding version', 'shards', 'databases' ]
+      # In an ignored section.
+      in_ignore = false
+
+      while ! sh_status_lines.empty?
+        line = sh_status_lines.shift
+
+        if line =~ %r{^\S} || line.empty?
+          next
         end
-        if line =~ %r{shard key} && in_shard_list == 1
-          shard_name = final_stream.pop.strip
-          proper_line = ",{\"#{shard_name}\":"
-          final_stream << proper_line
+
+        if line =~ %r{^ {2}\S}
+          # Found a top-level section.
+
+          # Some top-level sections (sharding version) end in a closing brace.
+          next if line == "  }"
+
+          # Obtain the section name.
+          section = line.gsub(%r{^  ([^:]+):.*$}, '\1')
+
+          next
         end
-        if line =~ %r{shard key} && in_shard_list.zero?
-          in_shard_list = 1
-          shard_name = final_stream.pop.strip
-          id_line = "#{final_stream.pop[0..-2]}, \"shards\": "
-          proper_line = "[{\"#{shard_name}\":"
-          final_stream << id_line
-          final_stream << proper_line
+
+        case section
+        when 'sharding version'
+          line.gsub!(%r{,$}, '')
+          kv_match = line.match(%r{^\s*"([^"]+)"\s*:\s*(.*)$})
+          key = kv_match[1]
+          value = kv_match[2]
+
+          if value =~ %r{^\d+$}
+            value = value.to_i
+          else
+            value.gsub!(%r{^"(.*)"$}, '\1')
+          end
+
+          output_hash[section][key] = value
+        when 'shards'
+          output_hash[section] << JSON.parse(line)
+        when 'databases'
+          next if line =~ %r{^\s*[^\{[:space:]]|-->>}
+          output_hash[section] << JSON.parse(line)
         end
-        if in_chunk == 1
-          in_chunk = 0
-          line = "\"#{line.strip}\"}}"
-        end
-        in_chunk = 1 if line =~ %r{chunks} && in_chunk.zero?
-        line.gsub!(%r{shard key}, '{"shard key"')
-        line.gsub!(%r{chunks}, ',"chunks"')
-        final_stream << line unless line.empty?
-        prev_line = line
       end
-      final_stream << ' ] }' if in_shard_list == 1
-      final_stream << ' ] }'
-      output = final_stream.join("\n")
-      info(output)
+    else
+      # Hack to avoid non-json empty sets
+      output = '{}' if output == "null\n"
+      output.gsub!(%r{\s*}, '')
+      output.gsub!(%r{[[:alpha:]]+\([^)]*\)}, 'null')
+      output_hash = JSON.parse(output)
     end
 
-    # Hack to avoid non-json empty sets
-    output = '{}' if output == "null\n"
-    output.gsub!(%r{\s*}, '')
-    JSON.parse(output)
+    output_hash
   end
 end
