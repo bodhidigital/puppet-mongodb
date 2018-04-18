@@ -85,11 +85,11 @@ class Puppet::Provider::Mongodb < Puppet::Provider
 
     args = [db, '--quiet', '--host', host]
     args.push('--ipv6') if ipv6_is_enabled(config)
-    args.push('--sslAllowInvalidHostnames') if ssl_invalid_hostnames(
-        host, config)
 
     if ssl_is_enabled(config)
       args.push('--ssl')
+      args.push('--sslAllowInvalidHostnames') if ssl_invalid_hostnames(
+          host, config)
       args += ['--sslPEMKeyFile', config['sslcert']]
 
       ssl_ca = config['sslca']
